@@ -32,8 +32,16 @@ try:
     ov_libs_dir = os.path.join(os.path.dirname(openvino.__file__), 'libs')
     if os.path.isdir(ov_libs_dir):
         for f in os.listdir(ov_libs_dir):
-            if f.endswith(('.dylib', '.so')) and 'hwloc' not in f and 'tbbbind' not in f:
-                binaries.append((os.path.join(ov_libs_dir, f), 'openvino/libs'))
+            if f.endswith(('.dylib', '.so')):
+                if 'hwloc' in f or 'tbbbind' in f:
+                    continue
+                elif 'tbb' in f:
+                    # TBB libraries already have valid Developer ID signatures from Intel
+                    # that fail PyInstaller ad-hoc re-signing on macOS Sequoia.
+                    # Bundle them as datas to preserve original signatures intact.
+                    added_files.append((os.path.join(ov_libs_dir, f), 'openvino/libs'))
+                else:
+                    binaries.append((os.path.join(ov_libs_dir, f), 'openvino/libs'))
 except Exception as e:
     print(f"Warning: could not collect openvino dynamic libs: {e}")
 
@@ -90,6 +98,10 @@ a = Analysis(
     cipher=block_cipher,
     noarchive=False,
 )
+
+# Filter out libraries that fail install_name_tool / codesign re-signing on macOS Sequoia.
+# TBB libraries are bundled via datas instead.
+a.binaries = [b for b in a.binaries if 'hwloc' not in b[0].lower() and 'tbbbind' not in b[0].lower() and 'tbb' not in b[0].lower()]
 
 pyz = PYZ(a.pure, a.zipped_data, cipher=block_cipher)
 
