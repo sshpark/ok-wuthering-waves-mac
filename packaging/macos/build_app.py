@@ -76,6 +76,25 @@ def build_app():
 
     app_path = os.path.join(dist_dir, 'OK-Wuthering-Waves.app')
     if os.path.exists(app_path):
+        # Ensure OpenVINO runtime dependencies (Intel TBB) are in place
+        try:
+            import openvino
+            ov_libs_dir = os.path.join(os.path.dirname(openvino.__file__), 'libs')
+            frameworks_dir = os.path.join(app_path, 'Contents', 'Frameworks')
+            ov_target_libs = os.path.join(frameworks_dir, 'openvino', 'libs')
+            os.makedirs(ov_target_libs, exist_ok=True)
+            for lib_name in ['libtbb.12.dylib', 'libtbbmalloc.2.dylib', 'libtbbmalloc_proxy.2.dylib']:
+                src = os.path.join(ov_libs_dir, lib_name)
+                if os.path.exists(src):
+                    shutil.copy2(src, os.path.join(ov_target_libs, lib_name))
+                    fw_dest = os.path.join(frameworks_dir, lib_name)
+                    if os.path.islink(fw_dest) or os.path.exists(fw_dest):
+                        os.remove(fw_dest)
+                    shutil.copy2(src, fw_dest)
+            print("OpenVINO TBB libraries installed into app bundle.")
+        except Exception as e:
+            print(f"Warning: could not install TBB libraries: {e}")
+
         binary_path = os.path.join(app_path, 'Contents', 'MacOS', 'ok-wuthering-waves')
         print("Signing macOS app bundle...")
         subprocess.run(['codesign', '-s', '-', '--force', binary_path], check=False)
